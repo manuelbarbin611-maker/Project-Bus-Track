@@ -45,6 +45,7 @@ class RegisteredUserController extends Controller
             'name'                               => $request->name,
             'email'                              => $request->email,
             'password'                           => Hash::make($request->password),
+            'role'                               => 'user', // new sign-ups are always regular users
             'email_verification_code'            => $code,
             'email_verification_code_expires_at' => now()->addMinutes(15),
         ]);

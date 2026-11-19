@@ -20,7 +20,11 @@ const fetchPassengers = async () => {
     try {
         const res = await axios.get('/passengers');
         passengers.value = res.data.data ?? [];
-    } catch { notify('error', 'Failed to load passengers.'); }
+    } catch (e) {
+        notify('error' , e.response?.status === 403
+            ? 'You do not have permission to view passengers.'
+            : 'Failed to load passengers.')
+    }
     finally  { loading.value = false; }
 };
 
@@ -47,7 +51,11 @@ const deletePassenger = async (p) => {
         await axios.delete(`/passengers/${p.id}`);
         passengers.value = passengers.value.filter(x => x.id !== p.id);
         notify('success', 'Passenger deleted.');
-    } catch { notify('error', 'Failed to delete passenger.'); }
+    } catch (e) {
+        notify('error', e.response?.status === 403
+            ? 'You do not have permission to delete passengers.'
+            : 'Failed to delete passenger.');
+    }
 };
 </script>
 

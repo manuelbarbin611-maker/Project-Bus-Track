@@ -1,8 +1,12 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
+
+// ── Permissions ────────────────────────────────────────────────────────────────
+const page = usePage();
+const can  = computed(() => page.props.auth.can);
 
 // ── State ──────────────────────────────────────────────────────────────────────
 const buses      = ref([]);
@@ -14,16 +18,19 @@ const loading    = ref(true);
 // ── Fetch all summary data ─────────────────────────────────────────────────────
 onMounted(async () => {
     try {
-        const [busRes, pasRes, routeRes, liveRes] = await Promise.all([
+        const requests = [
             axios.get('/buses'),
-            axios.get('/passengers'),
             axios.get('/routes'),
             axios.get('/live'),
-        ]);
-        buses.value      = busRes.data.data      ?? [];
-        passengers.value = pasRes.data.data      ?? [];
-        routes.value     = routeRes.data.data    ?? [];
-        recentLogs.value = liveRes.data.data     ?? [];
+        ];
+        // Passengers are only for admin and operator
+        if (can.value?.manageOperations) requests.push(axios.get('/passengers'));
+
+        const [busRes, routeRes, liveRes, pasRes] = await Promise.all(requests);
+        buses.value      = busRes.data.data   ?? [];
+        routes.value     = routeRes.data.data ?? [];
+        recentLogs.value = liveRes.data.data  ?? [];
+        passengers.value = pasRes?.data.data  ?? [];
     } catch (e) {
         console.error('Dashboard fetch error', e);
     } finally {
@@ -124,8 +131,8 @@ const busOccupancyPct = (bus) => {
                         <Link href="/buses" class="text-[12.5px] text-blue-700 no-underline font-medium mt-auto hover:underline">View all buses →</Link>
                     </div>
 
-                    <!-- Passengers -->
-                    <div class="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-3">
+                    <!-- Passengers (admin + operator only) -->
+                    <div v-if="can.manageOperations" class="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-3">
                         <div class="flex items-center gap-3.5">
                             <div class="w-11 h-11 rounded-xl bg-violet-50 text-violet-700 flex items-center justify-center shrink-0">
                                 <svg class="w-[22px] h-[22px]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -188,7 +195,7 @@ const busOccupancyPct = (bus) => {
                 </div>
 
                 <!-- ── Two-column section ──────────────────────────────── -->
-                <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+                <div class="grid gap-4 max-md:grid-cols-1" :class="can.manageOperations ? 'grid-cols-2' : 'grid-cols-1'">
 
                     <!-- Recent buses -->
                     <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
@@ -214,7 +221,7 @@ const busOccupancyPct = (bus) => {
                                 </div>
                                 <div class="flex flex-col items-end gap-1.5 shrink-0">
                                     <span :class="statusColor(b.status)" class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold capitalize whitespace-nowrap">{{ b.status }}</span>
-                                    <div class="w-15 h-1 bg-slate-100 rounded-full overflow-hidden" :title="`${busOccupancyPct(b)}% full`">
+                                    <div v-if="can.manageOperations" class="w-15 h-1 bg-slate-100 rounded-full overflow-hidden" :title="`${busOccupancyPct(b)}% full`">
                                         <div class="h-full bg-blue-600 rounded-full transition-all duration-300" :style="{ width: busOccupancyPct(b) + '%' }" />
                                     </div>
                                 </div>
@@ -222,8 +229,8 @@ const busOccupancyPct = (bus) => {
                         </div>
                     </div>
 
-                    <!-- Recent passengers -->
-                    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                    <!-- Recent passengers (admin + operator only) -->
+                    <div v-if="can.manageOperations" class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                         <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
                             <h2 class="text-sm font-bold text-slate-900">Recent Passengers</h2>
                             <Link href="/passengers" class="text-[12.5px] text-blue-700 no-underline font-medium hover:underline">View all</Link>
@@ -253,10 +260,13 @@ const busOccupancyPct = (bus) => {
                 <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                     <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
                         <h2 class="text-sm font-bold text-slate-900">Routes Overview</h2>
-                        <Link href="/routes" class="text-[12.5px] text-blue-700 no-underline font-medium hover:underline">Manage routes</Link>
+                        <Link href="/routes" class="text-[12.5px] text-blue-700 no-underline font-medium hover:underline">
+                            {{ can.manageNetwork ? 'Manage routes' : 'View routes' }}
+                        </Link>
                     </div>
                     <div v-if="routes.length === 0" class="py-8 text-center text-slate-400 text-[13.5px]">
-                        No routes yet. <Link href="/routes/create" class="text-blue-700 no-underline font-medium hover:underline">Create one →</Link>
+                        No routes yet.
+                        <Link v-if="can.manageNetwork" href="/routes/create" class="text-blue-700 no-underline font-medium hover:underline">Create one →</Link>
                     </div>
                     <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-px bg-slate-100">
                         <Link

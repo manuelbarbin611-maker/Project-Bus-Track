@@ -4,6 +4,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
+const can  = computed(() => page.props.auth.can);
 
 const mobileMenuOpen = ref(false);
 
@@ -49,22 +50,25 @@ const navLinks = [
                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                </svg>`,
     },
-   {
-    label: 'Live Tracking',
-    href: '/tracking',
-    routeName: 'tracking.',
-    badge: 'Live',
-    icon: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-            stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                d="M3 17l6-6 4 4 7-7" />
-            <circle cx="3" cy="17" r="1.5" />
-            <circle cx="9" cy="11" r="1.5" />
-            <circle cx="13" cy="15" r="1.5" />
-            <circle cx="20" cy="8" r="1.5" />
-        </svg>`,
-}
+    {
+        label: 'Live Tracking',
+        href: '/tracking',
+        routeName: 'tracking.',
+        badge: 'Live',
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 7-7" />
+                 <circle cx="3" cy="17" r="1.5" />
+                 <circle cx="9" cy="11" r="1.5" />
+                 <circle cx="13" cy="15" r="1.5" />
+                 <circle cx="20" cy="8" r="1.5" />
+               </svg>`,
+    },
 ];
+
+// Passengers link is only for admin and operator
+const visibleLinks = computed(() =>
+    navLinks.filter(link => link.label !== 'Passengers' || can.value?.manageOperations)
+);
 
 function isActive(routeName) {
     return route().current(routeName + '*') || route().current(routeName);
@@ -111,7 +115,7 @@ function isActive(routeName) {
                 <!-- Center: Desktop nav links -->
                 <nav class="hidden lg:flex items-center justify-center gap-0.5">
                     <Link
-                        v-for="link in navLinks"
+                        v-for="link in visibleLinks"
                         :key="link.label"
                         :href="link.href"
                         :class="[
@@ -133,7 +137,7 @@ function isActive(routeName) {
                 <!-- Center: Tablet icon-only nav -->
                 <nav class="hidden md:flex lg:hidden items-center justify-center gap-0.5">
                     <Link
-                        v-for="link in navLinks"
+                        v-for="link in visibleLinks"
                         :key="link.label"
                         :href="link.href"
                         :title="link.label"
@@ -213,7 +217,7 @@ function isActive(routeName) {
             >
                 <nav class="flex-1 overflow-y-auto p-3 flex flex-col gap-0.5">
                     <Link
-                        v-for="link in navLinks"
+                        v-for="link in visibleLinks"
                         :key="link.label"
                         :href="link.href"
                         :class="[

@@ -1,15 +1,19 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head } from '@inertiajs/vue3';
-import { ref, onMounted } from 'vue';
+import { Head, usePage } from '@inertiajs/vue3';
+import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 
 const props = defineProps({ busId: [String, Number] });
+
+const page = usePage();
+const can  = computed(() => page.props.auth.can);
 
 const bus          = ref(null);
 const queue        = ref([]);
 const passengers   = ref([]);
 const loading      = ref(true);
+const loadError    = ref(null);
 const notification = ref(null);
 const newStatus    = ref('');
 const changingStatus = ref(false);
@@ -23,17 +27,35 @@ const notify = (type, message) => {
 
 const fetchAll = async () => {
     loading.value = true;
+    loadError.value = null;
     try {
-        const [busRes, queueRes, passRes] = await Promise.all([
-            axios.get(`/buses/${props.busId}`),
-            axios.get(`/buses/${props.busId}/queue`),
-            axios.get('/passengers?status=waiting'),
-        ]);
-        bus.value        = busRes.data.data;
-        queue.value      = queueRes.data.data ?? [];
-        passengers.value = passRes.data.data ?? [];
-        newStatus.value  = bus.value.status;
-    } finally { loading.value = false; }
+        // 1) The bus itself: everyone can view it
+        const busRes = await axios.get(`/buses/${props.busId}`);
+        bus.value       = busRes.data.data;
+        newStatus.value = bus.value.status;
+    } catch (e) {
+        loadError.value = e.response?.status === 404
+            ? 'This bus was not found.'
+            : 'Failed to load this bus.';
+        loading.value = false;
+        return;
+    }
+
+    // 2) Queue and passengers: admin and operator only
+    if (can.value?.manageOperations) {
+        try {
+            const [queueRes, passRes] = await Promise.all([
+                axios.get(`/buses/${props.busId}/queue`),
+                axios.get('/passengers?status=waiting'),
+            ]);
+            queue.value      = queueRes.data.data ?? [];
+            passengers.value = passRes.data.data ?? [];
+        } catch {
+            notify('error', 'Failed to load the passenger queue.');
+        }
+    }
+
+    loading.value = false;
 };
 
 onMounted(fetchAll);
@@ -44,7 +66,11 @@ const changeStatus = async () => {
         await axios.patch(`/buses/${props.busId}/status`, { status: newStatus.value });
         bus.value.status = newStatus.value;
         notify('success', `Status updated to ${newStatus.value}.`);
-    } catch { notify('error', 'Failed to update status.'); }
+    } catch (e) {
+        notify('error', e.response?.status === 403
+            ? 'You do not have permission to change the status.'
+            : 'Failed to update status.');
+    }
     finally  { changingStatus.value = false; }
 };
 
@@ -111,6 +137,7 @@ const availablePassengers = () => {
             </div>
 
             <div v-if="loading" class="loading">Loading…</div>
+            <div v-else-if="loadError" class="notif notif-error">{{ loadError }}</div>
 
             <template v-else-if="bus">
                 <!-- Info card -->
@@ -126,11 +153,11 @@ const availablePassengers = () => {
                             </div>
                             <p v-if="bus.current_stop" class="current-stop">📍 {{ bus.current_stop.stop_name }}</p>
                         </div>
-                        <a :href="`/buses/${busId}/edit`" class="btn-edit">Edit Bus</a>
+                        <a v-if="can.manageOperations" :href="`/buses/${busId}/edit`" class="btn-edit">Edit Bus</a>
                     </div>
 
-                    <!-- Status change -->
-                    <div class="status-row">
+                    <!-- Status change (admin + operator only) -->
+                    <div v-if="can.manageOperations" class="status-row">
                         <label class="label">Change Status</label>
                         <div class="status-controls">
                             <select v-model="newStatus" class="input-sm">
@@ -145,8 +172,8 @@ const availablePassengers = () => {
                     </div>
                 </div>
 
-                <!-- Queue -->
-                <div class="card">
+                <!-- Queue (admin + operator only) -->
+                <div v-if="can.manageOperations" class="card">
                     <div class="card-header">
                         <h2 class="card-title">Passenger Queue</h2>
                         <span class="count-chip">{{ queue.length }} waiting</span>
@@ -182,8 +209,8 @@ const availablePassengers = () => {
                     </div>
                 </div>
 
-                <!-- Onboarded passengers -->
-                <div v-if="bus.passengers?.filter(p => p.status === 'onboarded').length" class="card">
+                <!-- Onboarded passengers (admin + operator only) -->
+                <div v-if="can.manageOperations && bus.passengers?.filter(p => p.status === 'onboarded').length" class="card">
                     <div class="card-header">
                         <h2 class="card-title">Onboarded Passengers</h2>
                         <span class="count-chip">{{ bus.passengers.filter(p=>p.status==='onboarded').length }}</span>

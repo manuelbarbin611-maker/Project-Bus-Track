@@ -1,8 +1,11 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, usePage } from '@inertiajs/vue3';
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
+
+const page = usePage();
+const can  = computed(() => page.props.auth.can);
 
 const buses        = ref([]);
 const loading      = ref(true);
@@ -46,7 +49,11 @@ const deleteBus = async (bus) => {
         await axios.delete(`/buses/${bus.id}`);
         buses.value = buses.value.filter(b => b.id !== bus.id);
         notify('success', 'Bus deleted.');
-    } catch { notify('error', 'Failed to delete bus.'); }
+    } catch (e) {
+        notify('error', e.response?.status === 403
+            ? 'You do not have permission to delete buses.'
+            : 'Failed to delete bus.');
+    }
 };
 </script>
 
@@ -64,9 +71,9 @@ const deleteBus = async (bus) => {
             <div class="page-header">
                 <div>
                     <h1 class="page-title">Buses</h1>
-                    <p class="page-sub">Manage your fleet of buses</p>
+                    <p class="page-sub">{{ can.manageOperations ? 'Manage your fleet of buses' : 'View the fleet of buses' }}</p>
                 </div>
-                <a href="/buses/create" class="btn-primary">+ New Bus</a>
+                <a v-if="can.manageOperations" href="/buses/create" class="btn-primary">+ New Bus</a>
             </div>
 
             <!-- Stats -->
@@ -121,9 +128,9 @@ const deleteBus = async (bus) => {
                                 <td><span :class="statusColor(b.status)" class="badge">{{ b.status }}</span></td>
                                 <td>
                                     <div class="action-row">
-                                        <a :href="`/buses/${b.id}`"      class="act act-view">View</a>
-                                        <a :href="`/buses/${b.id}/edit`" class="act act-edit">Edit</a>
-                                        <button @click="deleteBus(b)"    class="act act-del">Delete</button>
+                                        <a :href="`/buses/${b.id}`" class="act act-view">View</a>
+                                        <a v-if="can.manageOperations" :href="`/buses/${b.id}/edit`" class="act act-edit">Edit</a>
+                                        <button v-if="can.manageOperations" @click="deleteBus(b)" class="act act-del">Delete</button>
                                     </div>
                                 </td>
                             </tr>

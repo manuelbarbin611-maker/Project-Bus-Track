@@ -17,10 +17,19 @@ async function request(path: string, options: RequestInit = {}) {
   const authHeader = await getAuthHeader();
   Object.assign(headers, authHeader);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (err) {
+    // Network error (API unreachable)
+    throw {
+      status: 0,
+      data: { message: 'Unable to connect to server. Please check your internet connection.' },
+    };
+  }
 
   const text = await res.text();
   try {
@@ -38,6 +47,7 @@ export const api = {
   get: (path: string) => request(path, { method: 'GET' }),
   post: (path: string, body?: any) => request(path, { method: 'POST', body: JSON.stringify(body) }),
   put: (path: string, body?: any) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
+  patch: (path: string, body?: any) => request(path, { method: 'PATCH', body: JSON.stringify(body) }),
   del: (path: string) => request(path, { method: 'DELETE' }),
   TOKEN_KEY,
   async saveToken(token: string) {

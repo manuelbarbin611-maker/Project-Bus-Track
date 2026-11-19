@@ -11,16 +11,32 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      backBehavior="none"
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarStyle: { display: 'none' },
       }}>
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Driver Dashboard',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gear" color={color} />,
+        }}
+      />
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
+          title: 'Live Buses',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="routes"
+        options={{
+          title: 'Routes',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="map" color={color} />,
         }}
       />
     </Tabs>

@@ -11,6 +11,11 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        if ($this->command?->option('class') !== LocalDevelopmentSeeder::class && app()->environment('local')) {
+            $this->call(LocalDevelopmentSeeder::class);
+            return;
+        }
+
         // ── 1. USERS (admin + operator) ─────────────────────
         User::updateOrCreate(
             ['email' => 'admin@busqueue.local'],

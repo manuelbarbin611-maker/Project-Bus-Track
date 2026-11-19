@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '@app/context/AuthContext';
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const { register } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [password_confirmation, setPasswordConfirmation] = useState('');
+  const [loading, setLoading] = useState(false);
 
   return (
     <LinearGradient 
@@ -70,13 +73,42 @@ export default function RegisterScreen() {
                   placeholder="Repeat password" 
                   placeholderTextColor="#475569"
                   secureTextEntry
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  value={password_confirmation}
+                  onChangeText={setPasswordConfirmation}
                 />
               </View>
 
-              <TouchableOpacity style={styles.submitButton}>
-                <Text style={styles.submitButtonText}>Create account</Text>
+              <TouchableOpacity 
+                style={styles.submitButton}
+                onPress={async () => {
+                  if (!name || !email || !password || !password_confirmation) {
+                    Alert.alert('Error', 'Please fill in all fields');
+                    return;
+                  }
+                  if (password !== password_confirmation) {
+                    Alert.alert('Error', 'Passwords do not match');
+                    return;
+                  }
+                  if (password.length < 8) {
+                    Alert.alert('Error', 'Password must be at least 8 characters');
+                    return;
+                  }
+                  try {
+                    setLoading(true);
+                    await register({ name, email, password, password_confirmation });
+                    Alert.alert('Success', 'Account created successfully', [
+                      { text: 'OK', onPress: () => router.replace('/login') }
+                    ]);
+                  } catch (err: any) {
+                    console.log('Registration error:', JSON.stringify(err, null, 2));
+                    Alert.alert('Registration Failed', err?.data?.message || err?.message || JSON.stringify(err));
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
+              >
+                <Text style={styles.submitButtonText}>{loading ? 'Creating account...' : 'Create account'}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => router.push('/login')}>

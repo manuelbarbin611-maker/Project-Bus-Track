@@ -1,5 +1,6 @@
 node_modules/
 BusTrackMobile/node_modules/
+BusTrackMobile/android/
 tracking-vue-app/node_modules/
 tracking-vue-app/vendor/
 .env

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, SafeAreaView, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@app/context/AuthContext';
@@ -15,8 +15,13 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const res = await login(email, password);
-      if (res?.token) {
-        router.replace('/explore');
+      if (res?.access_token || res?.token) {
+        const role = res?.user?.role;
+        if (role === 'operator' || role === 'admin') {
+          router.replace('/(tabs)/dashboard');
+        } else {
+          router.replace('/(tabs)/explore');
+        }
       } else {
         Alert.alert('Sign in failed', res?.message || 'Please check credentials');
       }
@@ -53,7 +58,14 @@ export default function LoginScreen() {
           onChangeText={setPassword}
         />
         <TouchableOpacity style={styles.button} onPress={handleSignIn} disabled={loading}>
-          <Text style={styles.buttonText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.buttonText}>Signing in...</Text>
+            </View>
+          ) : (
+            <Text style={styles.buttonText}>Sign In</Text>
+          )}
         </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push('/register')}>
           <Text style={styles.linkText}>{"Don't have an account? Register"}</Text>
@@ -70,6 +82,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#f1f5f9', padding: 12, borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#e2e8f0' },
   button: { backgroundColor: '#2563eb', padding: 16, borderRadius: 10, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: 'bold' },
+  loadingContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   linkText: { color: '#2563eb', textAlign: 'center', marginTop: 20 },
   header: { width: '100%', paddingHorizontal: 20, marginBottom: 20 },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 8 },

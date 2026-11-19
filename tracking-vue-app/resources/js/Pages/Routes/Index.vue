@@ -1,17 +1,21 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import axios from 'axios';
 
+// ── Permissions ────────────────────────────────────────────────────────────
+const page = usePage();
+const can  = computed(() => page.props.auth.can);
+
 // ── State ──────────────────────────────────────────────────────────────────
-const routes     = ref([]);
-const loading    = ref(true);
-const search     = ref('');
-const deleting   = ref(null);
-const showConfirm = ref(false);
+const routes       = ref([]);
+const loading      = ref(true);
+const search       = ref('');
+const deleting     = ref(null);
+const showConfirm  = ref(false);
 const deleteTarget = ref(null);
-const error      = ref(null);
+const error        = ref(null);
 
 // ── Fetch ──────────────────────────────────────────────────────────────────
 async function fetchRoutes() {
@@ -59,10 +63,12 @@ async function doDelete() {
     try {
         await axios.delete(`/routes/${deleteTarget.value.id}`);
         routes.value = routes.value.filter(r => r.id !== deleteTarget.value.id);
-    } catch {
-        error.value = 'Could not delete route.';
+    } catch (e) {
+        error.value = e.response?.status === 403
+            ? 'Only admins can delete routes.'
+            : 'Could not delete route.';
     } finally {
-        deleting.value    = null;
+        deleting.value     = null;
         deleteTarget.value = null;
     }
 }
@@ -87,9 +93,11 @@ function statusClass(status) {
             <div class="ri-heading">
                 <div>
                     <h1 class="ri-title">Bus Routes</h1>
-                    <p class="ri-subtitle">Manage all transit routes and their stops</p>
+                    <p class="ri-subtitle">
+                        {{ can.manageNetwork ? 'Manage all transit routes and their stops' : 'View all transit routes and their stops' }}
+                    </p>
                 </div>
-                <Link :href="route('routes.create')" class="ri-btn ri-btn--primary">
+                <Link v-if="can.manageNetwork" :href="route('routes.create')" class="ri-btn ri-btn--primary">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
                     </svg>
@@ -176,9 +184,11 @@ function statusClass(status) {
                     {{ search ? 'No routes match your search' : 'No routes yet' }}
                 </h3>
                 <p class="ri-empty-text">
-                    {{ search ? 'Try a different keyword.' : 'Create your first bus route to get started.' }}
+                    {{ search
+                        ? 'Try a different keyword.'
+                        : (can.manageNetwork ? 'Create your first bus route to get started.' : 'No routes have been added yet.') }}
                 </p>
-                <Link v-if="!search" :href="route('routes.create')" class="ri-btn ri-btn--primary">
+                <Link v-if="!search && can.manageNetwork" :href="route('routes.create')" class="ri-btn ri-btn--primary">
                     Create Route
                 </Link>
             </div>
@@ -203,7 +213,6 @@ function statusClass(status) {
                             class="ri-row"
                             :style="{ animationDelay: `${i * 40}ms` }"
                         >
-                            <!-- Name -->
                             <td>
                                 <Link :href="route('routes.show', r.id)" class="ri-route-name">
                                     <span class="ri-route-dot" />
@@ -211,17 +220,14 @@ function statusClass(status) {
                                 </Link>
                             </td>
 
-                            <!-- Code -->
                             <td>
                                 <span class="ri-code-chip">{{ r.code ?? '—' }}</span>
                             </td>
 
-                            <!-- Description -->
                             <td class="ri-desc">
                                 {{ r.description ?? '—' }}
                             </td>
 
-                            <!-- Stops count -->
                             <td>
                                 <span class="ri-stops-pill">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
@@ -231,14 +237,12 @@ function statusClass(status) {
                                 </span>
                             </td>
 
-                            <!-- Status -->
                             <td>
                                 <span :class="statusClass(r.status)">
                                     {{ r.status ?? 'draft' }}
                                 </span>
                             </td>
 
-                            <!-- Actions -->
                             <td class="ri-actions">
                                 <Link
                                     :href="`/routes/${r.id}`"
@@ -251,6 +255,7 @@ function statusClass(status) {
                                     </svg>
                                 </Link>
                                 <Link
+                                    v-if="can.manageNetwork"
                                     :href="route('routes.edit', r.id)"
                                     class="ri-action-btn ri-action-btn--edit"
                                     title="Edit"
@@ -261,6 +266,7 @@ function statusClass(status) {
                                     </svg>
                                 </Link>
                                 <button
+                                    v-if="can.manageNetwork"
                                     class="ri-action-btn ri-action-btn--del"
                                     title="Delete"
                                     :disabled="deleting === r.id"
@@ -279,7 +285,6 @@ function statusClass(status) {
                     </tbody>
                 </table>
 
-                <!-- Row count -->
                 <div class="ri-footer">
                     Showing <strong>{{ filtered.length }}</strong> of <strong>{{ routes.length }}</strong> routes
                 </div>
@@ -316,495 +321,126 @@ function statusClass(status) {
 </template>
 
 <style scoped>
-/* ── Page shell ──────────────────────────────────────────────────────────── */
-.ri-page {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    max-width: 1100px;
-}
+/* ── Page shell ── */
+.ri-page { display: flex; flex-direction: column; gap: 20px; max-width: 1100px; }
 
-/* ── Heading ─────────────────────────────────────────────────────────────── */
-.ri-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-}
+/* ── Heading ── */
+.ri-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ri-title { font-size: 22px; font-weight: 700; color: #0f172a; margin: 0; letter-spacing: -0.4px; }
+.ri-subtitle { font-size: 13px; color: #64748b; margin: 3px 0 0; }
 
-.ri-title {
-    font-size: 22px;
-    font-weight: 700;
-    color: #0f172a;
-    margin: 0;
-    letter-spacing: -0.4px;
-}
-
-.ri-subtitle {
-    font-size: 13px;
-    color: #64748b;
-    margin: 3px 0 0;
-}
-
-/* ── Stats strip ─────────────────────────────────────────────────────────── */
-.ri-stats {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 14px 24px;
-    width: fit-content;
-}
-
-.ri-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 0 24px;
-}
-
+/* ── Stats strip ── */
+.ri-stats { display: flex; align-items: center; gap: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 24px; width: fit-content; }
+.ri-stat { display: flex; flex-direction: column; align-items: center; padding: 0 24px; }
 .ri-stat:first-child { padding-left: 0; }
 .ri-stat:last-child  { padding-right: 0; }
-
-.ri-stat-value {
-    font-size: 22px;
-    font-weight: 700;
-    color: #0f172a;
-    line-height: 1;
-}
-
+.ri-stat-value { font-size: 22px; font-weight: 700; color: #0f172a; line-height: 1; }
 .ri-stat-value--green { color: #16a34a; }
+.ri-stat-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 500; margin-top: 3px; }
+.ri-stat-divider { width: 1px; height: 32px; background: #e2e8f0; }
 
-.ri-stat-label {
-    font-size: 11px;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    font-weight: 500;
-    margin-top: 3px;
-}
+/* ── Toolbar ── */
+.ri-toolbar { display: flex; gap: 10px; align-items: center; }
+.ri-search-wrap { position: relative; flex: 1; max-width: 340px; }
+.ri-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: #94a3b8; pointer-events: none; }
+.ri-search { width: 100%; padding: 8px 12px 8px 34px; font-size: 13.5px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; color: #0f172a; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+.ri-search:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
 
-.ri-stat-divider {
-    width: 1px;
-    height: 32px;
-    background: #e2e8f0;
-}
-
-/* ── Toolbar ─────────────────────────────────────────────────────────────── */
-.ri-toolbar {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.ri-search-wrap {
-    position: relative;
-    flex: 1;
-    max-width: 340px;
-}
-
-.ri-search-icon {
-    position: absolute;
-    left: 11px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 15px;
-    height: 15px;
-    color: #94a3b8;
-    pointer-events: none;
-}
-
-.ri-search {
-    width: 100%;
-    padding: 8px 12px 8px 34px;
-    font-size: 13.5px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    background: #fff;
-    color: #0f172a;
-    outline: none;
-    transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.ri-search:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
-}
-
-/* ── Buttons ─────────────────────────────────────────────────────────────── */
-.ri-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
-    font-size: 13.5px;
-    font-weight: 600;
-    border-radius: 8px;
-    cursor: pointer;
-    border: 1px solid transparent;
-    text-decoration: none;
-    white-space: nowrap;
-    transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
-}
-
+/* ── Buttons ── */
+.ri-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13.5px; font-weight: 600; border-radius: 8px; cursor: pointer; border: 1px solid transparent; text-decoration: none; white-space: nowrap; transition: background 0.15s, box-shadow 0.15s, opacity 0.15s; }
 .ri-btn svg { width: 15px; height: 15px; }
-
-.ri-btn--primary {
-    background: #1a56db;
-    color: #fff;
-    border-color: #1a56db;
-}
+.ri-btn--primary { background: #1a56db; color: #fff; border-color: #1a56db; }
 .ri-btn--primary:hover { background: #1e429f; }
-
-.ri-btn--ghost {
-    background: #fff;
-    color: #475569;
-    border-color: #e2e8f0;
-}
+.ri-btn--ghost { background: #fff; color: #475569; border-color: #e2e8f0; }
 .ri-btn--ghost:hover { background: #f8fafc; }
-
-.ri-btn--danger {
-    background: #dc2626;
-    color: #fff;
-    border-color: #dc2626;
-}
+.ri-btn--danger { background: #dc2626; color: #fff; border-color: #dc2626; }
 .ri-btn--danger:hover { background: #b91c1c; }
 
-/* ── Error banner ────────────────────────────────────────────────────────── */
-.ri-error {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: 8px;
-    color: #dc2626;
-    font-size: 13.5px;
-    padding: 10px 14px;
-}
-
+/* ── Error banner ── */
+.ri-error { display: flex; align-items: center; gap: 8px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: #dc2626; font-size: 13.5px; padding: 10px 14px; }
 .ri-error svg { width: 16px; height: 16px; flex-shrink: 0; }
+.ri-error-close { margin-left: auto; background: none; border: none; cursor: pointer; color: #dc2626; font-size: 13px; line-height: 1; }
 
-.ri-error-close {
-    margin-left: auto;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #dc2626;
-    font-size: 13px;
-    line-height: 1;
-}
-
-/* ── Table ───────────────────────────────────────────────────────────────── */
-.ri-table-wrap {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-.ri-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13.5px;
-}
-
-.ri-table thead tr {
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.ri-table th {
-    padding: 11px 16px;
-    text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: #64748b;
-    white-space: nowrap;
-}
-
+/* ── Table ── */
+.ri-table-wrap { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+.ri-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.ri-table thead tr { background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+.ri-table th { padding: 11px 16px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: #64748b; white-space: nowrap; }
 .ri-th--right { text-align: right; }
-
-.ri-row {
-    border-bottom: 1px solid #f1f5f9;
-    animation: rowIn 0.25s ease both;
-    transition: background 0.12s;
-}
-
+.ri-row { border-bottom: 1px solid #f1f5f9; animation: rowIn 0.25s ease both; transition: background 0.12s; }
 .ri-row:last-child { border-bottom: none; }
 .ri-row:hover { background: #fafbff; }
+@keyframes rowIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.ri-table td { padding: 12px 16px; color: #334155; vertical-align: middle; }
 
-@keyframes rowIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-.ri-table td {
-    padding: 12px 16px;
-    color: #334155;
-    vertical-align: middle;
-}
-
-/* Route name cell */
-.ri-route-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    color: #0f172a;
-    text-decoration: none;
-    transition: color 0.12s;
-}
+.ri-route-name { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #0f172a; text-decoration: none; transition: color 0.12s; }
 .ri-route-name:hover { color: #1a56db; }
+.ri-route-dot { width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; flex-shrink: 0; }
 
-.ri-route-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #3b82f6;
-    flex-shrink: 0;
-}
+.ri-code-chip { display: inline-block; font-size: 11.5px; font-weight: 700; font-family: 'Fira Code', 'Cascadia Code', monospace; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 5px; border: 1px solid #dbeafe; letter-spacing: 0.5px; }
 
-/* Code chip */
-.ri-code-chip {
-    display: inline-block;
-    font-size: 11.5px;
-    font-weight: 700;
-    font-family: 'Fira Code', 'Cascadia Code', monospace;
-    background: #eff6ff;
-    color: #1d4ed8;
-    padding: 2px 8px;
-    border-radius: 5px;
-    border: 1px solid #dbeafe;
-    letter-spacing: 0.5px;
-}
+.ri-desc { color: #64748b; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Description */
-.ri-desc {
-    color: #64748b;
-    max-width: 260px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Stops pill */
-.ri-stops-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #475569;
-    background: #f1f5f9;
-    padding: 3px 9px;
-    border-radius: 99px;
-}
+.ri-stops-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: #475569; background: #f1f5f9; padding: 3px 9px; border-radius: 99px; }
 .ri-stops-pill svg { width: 10px; height: 10px; }
 
-/* Status badges */
-.ri-badge {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: capitalize;
-    padding: 3px 9px;
-    border-radius: 99px;
-}
+.ri-badge { display: inline-block; font-size: 11px; font-weight: 600; text-transform: capitalize; padding: 3px 9px; border-radius: 99px; }
 .ri-badge--green  { background: #dcfce7; color: #15803d; }
 .ri-badge--gray   { background: #f1f5f9; color: #475569; }
 .ri-badge--yellow { background: #fef9c3; color: #a16207; }
 
-/* Actions cell */
-.ri-actions {
-    text-align: right;
-    white-space: nowrap;
-}
-
-.ri-action-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 7px;
-    border: 1px solid transparent;
-    cursor: pointer;
-    background: transparent;
-    text-decoration: none;
-    transition: background 0.12s, color 0.12s;
-    margin-left: 4px;
-}
-
+.ri-actions { text-align: right; white-space: nowrap; }
+.ri-action-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 7px; border: 1px solid transparent; cursor: pointer; background: transparent; text-decoration: none; transition: background 0.12s, color 0.12s; margin-left: 4px; }
 .ri-action-btn svg { width: 14px; height: 14px; }
-
 .ri-action-btn--view { color: #64748b; }
 .ri-action-btn--view:hover { background: #eff6ff; color: #1d4ed8; border-color: #dbeafe; }
-
 .ri-action-btn--edit { color: #64748b; }
 .ri-action-btn--edit:hover { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
-
 .ri-action-btn--del { color: #64748b; }
 .ri-action-btn--del:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
 .ri-action-btn--del:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Spin animation */
-.ri-spin {
-    animation: spin 0.8s linear infinite;
-}
+.ri-spin { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Table footer */
-.ri-footer {
-    padding: 10px 16px;
-    font-size: 12px;
-    color: #94a3b8;
-    border-top: 1px solid #f1f5f9;
-    background: #fafbff;
-}
+.ri-footer { padding: 10px 16px; font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; background: #fafbff; }
 
-/* ── Skeleton ─────────────────────────────────────────────────────────────── */
+/* ── Skeleton ── */
 .ri-skeleton-row td { padding: 14px 16px; }
-
-.ri-skeleton {
-    height: 14px;
-    border-radius: 6px;
-    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite;
-}
-
+.ri-skeleton { height: 14px; border-radius: 6px; background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
 .ri-skeleton--w16 { width: 16%; }
 .ri-skeleton--w20 { width: 20%; }
 .ri-skeleton--w24 { width: 24%; }
 .ri-skeleton--w28 { width: 28%; }
 .ri-skeleton--w60 { width: 60%; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-@keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
-/* ── Empty state ─────────────────────────────────────────────────────────── */
-.ri-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 64px 24px;
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    text-align: center;
-    gap: 8px;
-}
-
-.ri-empty-icon {
-    width: 56px;
-    height: 56px;
-    background: #eff6ff;
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #3b82f6;
-    margin-bottom: 4px;
-}
-
+/* ── Empty state ── */
+.ri-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 64px 24px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; text-align: center; gap: 8px; }
+.ri-empty-icon { width: 56px; height: 56px; background: #eff6ff; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #3b82f6; margin-bottom: 4px; }
 .ri-empty-icon svg { width: 28px; height: 28px; }
+.ri-empty-title { font-size: 16px; font-weight: 600; color: #0f172a; margin: 0; }
+.ri-empty-text { font-size: 13px; color: #64748b; margin: 0 0 8px; }
 
-.ri-empty-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #0f172a;
-    margin: 0;
-}
-
-.ri-empty-text {
-    font-size: 13px;
-    color: #64748b;
-    margin: 0 0 8px;
-}
-
-/* ── Delete confirm modal ────────────────────────────────────────────────── */
-.ri-modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(15,23,42,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    padding: 16px;
-    backdrop-filter: blur(2px);
-}
-
-.ri-modal {
-    background: #fff;
-    border-radius: 14px;
-    padding: 28px;
-    max-width: 400px;
-    width: 100%;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.18);
-    text-align: center;
-}
-
-.ri-modal-icon {
-    width: 48px;
-    height: 48px;
-    background: #fef2f2;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #dc2626;
-    margin: 0 auto 14px;
-}
-
+/* ── Delete confirm modal ── */
+.ri-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; backdrop-filter: blur(2px); }
+.ri-modal { background: #fff; border-radius: 14px; padding: 28px; max-width: 400px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.18); text-align: center; }
+.ri-modal-icon { width: 48px; height: 48px; background: #fef2f2; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #dc2626; margin: 0 auto 14px; }
 .ri-modal-icon svg { width: 24px; height: 24px; }
+.ri-modal-title { font-size: 17px; font-weight: 700; color: #0f172a; margin: 0 0 8px; }
+.ri-modal-text { font-size: 13.5px; color: #475569; line-height: 1.6; margin: 0 0 20px; }
+.ri-modal-actions { display: flex; gap: 10px; justify-content: center; }
 
-.ri-modal-title {
-    font-size: 17px;
-    font-weight: 700;
-    color: #0f172a;
-    margin: 0 0 8px;
-}
+/* ── Modal transition ── */
+.modal-enter-active, .modal-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.modal-enter-from, .modal-leave-to { opacity: 0; transform: scale(0.95); }
 
-.ri-modal-text {
-    font-size: 13.5px;
-    color: #475569;
-    line-height: 1.6;
-    margin: 0 0 20px;
-}
-
-.ri-modal-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-}
-
-/* ── Modal transition ────────────────────────────────────────────────────── */
-.modal-enter-active, .modal-leave-active {
-    transition: opacity 0.2s, transform 0.2s;
-}
-.modal-enter-from, .modal-leave-to {
-    opacity: 0;
-    transform: scale(0.95);
-}
-
-/* ── Responsive ──────────────────────────────────────────────────────────── */
+/* ── Responsive ── */
 @media (max-width: 768px) {
     .ri-stats { padding: 12px 16px; }
     .ri-stat  { padding: 0 12px; }
-
     .ri-table th:nth-child(3),
     .ri-table td:nth-child(3) { display: none; }
-
     .ri-heading { flex-direction: column; align-items: stretch; }
     .ri-btn--primary { text-align: center; justify-content: center; }
 }

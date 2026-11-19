@@ -1,13 +1,34 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '@app/lib/config';
+import { api } from '@app/lib/api';
 
 const TASK_NAME = 'BUSTRACK_LOCATION_TASK';
 let foregroundBatch: any[] = [];
 const BATCH_SIZE = 5;
 const PENDING_KEY = 'bustrack_pending_location_batches';
+const BUS_ID_KEY = 'bustrack_selected_bus_id';
+
+async function getBusId(): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(BUS_ID_KEY);
+    return raw ? parseInt(raw, 10) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function setBusId(busId: number | null) {
+  try {
+    if (busId === null) {
+      await AsyncStorage.removeItem(BUS_ID_KEY);
+    } else {
+      await AsyncStorage.setItem(BUS_ID_KEY, busId.toString());
+    }
+  } catch (err) {
+    console.warn('Failed to persist bus_id', err);
+  }
+}
 
 async function saveFailedBatch(batch: any[]) {
   try {
@@ -45,21 +66,11 @@ async function flushPendingBatches() {
   const pending = await getPendingBatches();
   if (!pending || pending.length === 0) return;
 
-  const token = await SecureStore.getItemAsync('bustrack_token');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
+  const busId = await getBusId();
   const remaining: any[][] = [];
   for (const batch of pending) {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/locations/batch`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ locations: batch }),
-      });
-      if (!res.ok) {
-        remaining.push(batch);
-      }
+      await api.post('/api/locations/batch', { bus_id: busId, locations: batch });
     } catch {
       remaining.push(batch);
     }
@@ -69,19 +80,10 @@ async function flushPendingBatches() {
 
 async function sendBatch(locations: any[]) {
   if (!locations || locations.length === 0) return;
-  const token = await SecureStore.getItemAsync('bustrack_token');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const busId = await getBusId();
 
   try {
-    const res = await fetch(`${API_BASE_URL}/api/locations/batch`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ locations }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    // on success, try to flush any pending batches
+    await api.post('/api/locations/batch', { bus_id: busId, locations });
     await flushPendingBatches();
   } catch (err) {
     console.warn('Failed to send location batch, persisting for retry', err);
